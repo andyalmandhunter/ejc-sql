@@ -472,7 +472,16 @@
              (format "SHOW CREATE TABLE %s" entity-name))
     :schemas (fn [& _] "SHOW SCHEMAS")
     :tables (fn [& {:keys [schema]}]
-              (format "SHOW TABLES FROM %s", schema))}})
+              (format "SHOW TABLES FROM %s", schema))
+    :columns (fn [& {:keys [table]}]
+               (let [[schema-name table-name] (s/split table #"\.")]
+                 (format "
+                  SELECT column_name
+                  FROM information_schema.columns
+                  WHERE table_schema = '%s'
+                  AND table_name = '%s'"
+                         schema-name
+                         table-name)))}})
 
 ;; Use the same database introspection queries for MariaDB as for MySQL.
 (def queries (assoc queries :mariadb (queries :mysql)))
@@ -962,29 +971,27 @@
                          ;; no owners needed
                          (get-tables db)))
                      (get-views db))]
-    (if (not (and tables-list
-                  (not-empty (filter not-empty tables-list))))
-      ;; no tables yet
-      ;; pending tables...
-      (autocomplete-loading)
-      ;; Tables list loaded:
-      (if (not prefix-1)
-        (let [insert-or-update-table (or (select-sql? sql)
-                                         (insert-sql? sql)
-                                         (update-sql? sql))]
-          (cond
-            (and (not-empty insert-or-update-table)
-                 (in? tables-list insert-or-update-table
-                      :case-sensitive false))
-            ;; SELECT # FROM table
-            ;; or
-            ;; INSERT INTO table (field1, .#) values (123, 'text')
-            ;; or
-            ;; UPDATE table SET field1 = 123, .# = 'text' WHERE id = 1
-            (autocomplete-result
-             (get-colomns db insert-or-update-table true))
-            ;; SELECT or other queries types
-            :else (autocomplete-nothing)))
+    (if (not prefix-1)
+      (let [insert-or-update-table (or (select-sql? sql)
+                                       (insert-sql? sql)
+                                       (update-sql? sql))]
+        (cond
+          (not-empty insert-or-update-table)
+          ;; SELECT # FROM table
+          ;; or
+          ;; INSERT INTO table (field1, .#) values (123, 'text')
+          ;; or
+          ;; UPDATE table SET field1 = 123, .# = 'text' WHERE id = 1
+          (autocomplete-result
+           (get-colomns db insert-or-update-table true))
+          ;; SELECT or other queries types
+          :else (autocomplete-nothing)))
+      (if (not (and tables-list
+                    (not-empty (filter not-empty tables-list))))
+        ;; no tables yet
+        ;; pending tables...
+        (autocomplete-loading)
+        ;; Tables list loaded:
         (if (in? tables-list prefix-1 :case-sensitive false)
           ;; table.#<colomns-list>
           (let [table prefix-1
