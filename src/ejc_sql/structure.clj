@@ -464,10 +464,21 @@
                       FROM   pg_catalog.pg_proc p
                       WHERE  p.proname = '%s'" entity-name))
     :keywords (fn [& _]
-                "SELECT word FROM pg_get_keywords()")}})
+                "SELECT word FROM pg_get_keywords()")}
+   ;;-------
+   :trino
+   ;;-------
+   {:table (fn [& {:keys [entity-name]}]
+             (format "SHOW CREATE TABLE %s" entity-name))
+    :schemas (fn [& _] "SHOW SCHEMAS")
+    :tables (fn [& {:keys [schema]}]
+              (format "SHOW TABLES FROM %s", schema))}})
 
 ;; Use the same database introspection queries for MariaDB as for MySQL.
 (def queries (assoc queries :mariadb (queries :mysql)))
+
+;; Use the same database introspection queries for Presto as for Trino.
+(def queries (assoc queries :presto (queries :trino)))
 
 (defn autocomplete-available-for-db? [db-type]
   (queries db-type))
